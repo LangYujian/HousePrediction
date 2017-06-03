@@ -1,0 +1,3 @@
+This Project is to predict the housing price with data from Kaggle.
+
+The involved algorithm for the prediction is Linear Regression, Decision Tree, Random Forest, Gradient Boosting Tree
