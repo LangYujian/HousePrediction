@@ -1,0 +1,172 @@
+---
+title: "Homework1"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+#Lecture 1
+train <- read.csv('train.csv', stringsAsFactors = FALSE)
+summary(train)
+
+str(train)
+head(train)
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r, echo = FALSE}
+contVar <- NULL
+corr <- NULL
+catVar <- NULL
+catCorr <- NULL
+train$log_price = log(train$SalePrice)
+for (i in 1:dim(train)[2]) {
+  if (is.numeric((train[,i]))){
+    contVar <- c(contVar, i)
+    corr <- c(corr, cor(train[,i], train$log_price, use = 'pairwise.complete.obs'))
+  } else {
+    catVar <- c(catVar, i)
+  }
+}
+
+#contVar
+#length(contVar)
+#catVar
+#length(catVar)
+
+library(corrplot)
+trainCont <- train[,contVar]
+trainCont <- trainCont[,-1]
+trainCatg <- train[,catVar]
+correlations <- cor(trainCont, use = 'pairwise.complete.obs')
+corrplot(correlations, method = "square")
+
+```
+
+```{r, echo = FALSE}
+# first 5 highest correlated factors
+# find absolute value for each correlations
+absolute = abs(correlations)
+highestCorrelation <- NULL
+# find the sum of the absolute value for each correlations
+for (i in 1:dim(absolute)[1]) {
+  highestCorrelation <- c(highestCorrelation, sum(absolute[i,]))
+}     
+#highestCorrelation
+orderIndex = order(highestCorrelation)
+#orderIndex
+# find the 5 index with the highest absolute value for each correlations are
+# very likely to be the most important correlated factors among the 37 factors
+highestIndex = orderIndex[33:37]
+"top 5 most interrelated variables"
+#highestCorrelation[highestIndex] # their correlations values
+highestCorrelationNames = colnames(trainCont[,highestIndex]) #their names
+highestCorrelationNames
+# Cut the data of these columns
+trimmedData = trainCont[, highestIndex]
+trimCorrelations <- cor(trimmedData, use = 'pairwise.complete.obs')
+corrplot(trimCorrelations, method = "square") # plot the correlations
+
+```
+```{r, echo = FALSE}
+#continuous predictive power
+#for continuous variables, the predictive power is described as the absolute
+#correlation with SalePrice, when the absolute correlation is higher, it means 
+#it is positively or negatively correlated to the SalePrice, which can be
+#considered as the predictive power
+contVar <- contVar[-1] #remove ID
+corr <- corr[-1] 
+contVar <- contVar[-37] #remove SalePrice
+corr <- corr[-37]
+abscorr = abs(corr)
+#abscorr
+contPredictIndex = order(abscorr)
+#colnames(train)[contVar]
+"top 5 predictive power"
+rev(colnames(train)[contVar[contPredictIndex[32:36]]])
+rev(abscorr[contPredictIndex[32:36]])
+
+```
+```{r, echo = FALSE}
+#for categorical variables, the predictive power can be identified as the mean
+#difference between leftmost and rightmost categories, the more different the mean is, the 
+#higher predictive power the categorical variable has
+#filter out the variables with more than 5% missing data
+percentage <- sapply(train, function(x) {length(which(is.na(x)))/nrow(train)})
+percentage <- percentage[catVar]
+catVar <- catVar[percentage < 0.05]
+percentage <- percentage[percentage < 0.05]
+library(tabplot)
+for (i in 1:ceiling(length(catVar) / 5)) {
+  names <- c(length(train), catVar[((i - 1) * 5 + 1) : min(i * 5, length(catVar))])
+  tableplot(train[,names])
+}
+#meanDifference[meanOrder]
+"The Variable is considered as high predictive variables when the shape is very similar to that of the SalePrice"
+"Therefpre, The 10 Most Powerful Predicting Categorical Variable is"
+"MSZoning, LotShape, MasVnrType, ExterQual, Foundation, BsmtQual, HeatingQC, KitchenQual, SaleType, SaleCondition"
+
+
+```
+
+```{r, echo = FALSE}
+#generate potential predictive features
+#choose the first 3 variables whose absolute correlation with SalePrice is the highest (excluding SalePrice itself)
+#corr
+#colnames(train)[contVar]
+abscorr <- abs(corr)
+orderIndex<- order(abscorr)
+#corr[orderIndex[1:36]]
+#colnames(train)[contVar[orderIndex[1:36]]]
+AllNames <- colnames(train)
+df <- NULL
+x <- NULL
+xname <- NULL
+y <- NULL
+yname <- NULL
+new <- NULL
+difference <- NULL
+train$logPrice <- log(train$SalePrice)
+for (i in 1:length(contVar)) {
+  for (j in 1:length(contVar)) {
+    if (i > j) {
+      if ((corr[orderIndex[i]] > 0 & corr[orderIndex[j]] > 0) | (corr[orderIndex[i]] < 0 & corr[orderIndex[j]] < 0)) {
+        train$NewFeature <- with(train, eval(parse(text = AllNames[contVar[orderIndex[i]]])) + eval(parse(text = AllNames[contVar[orderIndex[j]]])))
+      } else {
+        train$NewFeature <- with(train, eval(parse(text = AllNames[contVar[orderIndex[i]]])) - eval(parse(text = AllNames[contVar[orderIndex[j]]])))
+      }
+      after <- with(train,cor(NewFeature,log_price, use = 'pairwise.complete.obs'))
+      xbefore <- with(train,cor(eval(parse(text = AllNames[contVar[orderIndex[i]]])),log_price, use = 'pairwise.complete.obs'))
+      ybefore <- with(train,cor(eval(parse(text = AllNames[contVar[orderIndex[j]]])),log_price, use = 'pairwise.complete.obs'))
+      if ((abs(after) > abs(xbefore)) & (abs(after) > abs(ybefore))) {
+        x <- c(x, xbefore)
+        xname <- c(xname, AllNames[contVar[orderIndex[i]]])
+        y <- c(y, ybefore)
+        yname <- c(yname, AllNames[contVar[orderIndex[j]]])
+        new <- c(new, after)
+        difference <- c(difference, abs(after) - max(abs(xbefore), abs(ybefore)))
+      }
+    }
+  }
+}
+df <- data.frame(x, xname, y, yname, new, difference)
+#df <- df[df$difference > 0.1,]
+df <- df[with(df, order(-difference)),][1:10,]
+df
+"Finish"
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

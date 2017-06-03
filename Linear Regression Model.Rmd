@@ -1,0 +1,277 @@
+---
+title: "Homework 3"
+author: "Lang Yujian"
+date: "May 21, 2017"
+output: html_document
+---
+read Data
+```{r}
+train <- read.csv("train.csv", stringsAsFactors = FALSE)
+train <- train[,-1]
+```
+Delete the variables with too much NAs and impute Data
+1. The missing Data for the BsmtQual, BsmtCond, BsmtExposure, BsmtFinType1, BsmtFinType2 are almost the same amounts. It can be estimated that the missing data in these variables are caused by same reason which might be the absence of the basement.
+2. The MasVnrType and MasVnrArea are always NA together. That can caused by the fact that there is no masonry veneer which leads to NA.
+```{r}
+dimension <- dim(train)
+missingNum <- sapply(train, function(x) {sum(is.na(x))})
+data <- train[, missingNum < 0.05 * dimension[1]]
+missingNum <- sapply(data, function(x) {sum(is.na(x))})
+data$BsmtExposure[which(is.na(data$BsmtExposure))] <- 'None'
+data$BsmtFinType1[which(is.na(data$BsmtFinType1))] <- 'None'
+data$BsmtFinType2[which(is.na(data$BsmtFinType2))] <- 'None'
+data$BsmtQual[which(is.na(data$BsmtQual))] <- 'None'
+data$BsmtCond[which(is.na(data$BsmtCond))] <- 'None'
+missingNum <- sapply(data, function(x) {sum(is.na(x))})
+```
+After filling up the basement-related missing values, the other missing values should be imputed with MICE. The categorical variables "MasVnrType" and "Electrical" should be converted into factors before imputation of the data
+```{r}
+library(mice)
+data$MasVnrType[which(is.na(data$MasVnrArea))] <- "None"
+data$MasVnrArea[which(is.na(data$MasVnrArea))] <- 0
+data$Electrical <- as.factor(data$Electrical)
+data_complete <- mice(data, m = 1, printFlag = FALSE)
+data_complete <- complete(data_complete)
+```
+Make sure there are no missing values inside.
+```{r}
+TotalMissingSum <- sum(sapply(data_complete, function(x) {sum(is.na(x))}))
+```
+Add the new features
+1. Basement Square Feet(Type I and Type II)
+2. 1st and 2nd Floor Square Feet
+3. Wood Deck and Open Porch Square Feet
+4. Basement Bathroom
+5. Bathroom
+6. Age of house (Year - YearBuilt)
+7. Year of Last Remodel
+8. High Quality Square Feet
+9. Total Area
+```{r}
+data_complete$BasementSF <- data_complete$BsmtFinSF1 + data_complete$BsmtFinSF2
+data_complete$OneandTwoFloorSF <- data_complete$X1stFlrSF + data_complete$X2ndFlrSF
+data_complete$FrontSF <- data_complete$WoodDeckSF + data_complete$OpenPorchSF
+data_complete$BasementBath <- data_complete$BsmtFullBath + 0.5 * data_complete$BsmtHalfBath
+data_complete$Bath <- data_complete$FullBath + 0.5 * data_complete$HalfBath
+data_complete$Age <- data_complete$YrSold - data_complete$YearBuilt
+data_complete$YrOfRemodel <- data_complete$YrSold - data_complete$YearRemodAdd
+data_complete$HighQualSF <- data_complete$BsmtFinSF1 + data_complete$BsmtFinSF2 + data_complete$GrLivArea + data_complete$GarageArea + data_complete$WoodDeckSF + data_complete$OpenPorchSF
+data_complete$TotalArea <- data_complete$GrLivArea+data_complete$TotalBsmtSF+data_complete$GarageArea+data_complete $LotArea+data_complete$MasVnrArea+data_complete$OpenPorchSF+data_complete$PoolArea+data_complete$ScreenPorch+data_complete$WoodDeckSF+data_complete$X3SsnPorch+data_complete$EnclosedPorch
+data_complete$LogPrice <- log(data_complete$SalePrice)
+data_complete <- data_complete[,-69] #get rid of SalePrice
+```
+Save the imputed data as future use
+```{r}
+write.csv(data_complete, file = "data_complete.csv", row.names = FALSE)
+```
+PreProcess Test Dataset and Impute test dataset
+1. Exterior1st and Exterior2nd are NA all together, so the reason for the missing data is that there is no covering for the house
+2. MasVnrType and MasVnrArea are most of the times, NA together. This is probably caused by the fact that the masonry veneer is none
+```{r}
+test <- read.csv("test.csv", stringsAsFactors = FALSE)
+id <- test$Id
+test <- test[,-1]
+all_names <- colnames(data)
+testdata <- test[,-c(3,6,57,58, 59, 60, 63,64,72, 73, 74)]
+sapply(testdata, function(x) {sum(is.na(x))})
+testdata[c(28, 889), "BsmtExposure"] <- 'Unf'
+testdata[c(758, 759), "BsmtQual"] <- 'None'
+testdata$BsmtFinType1[which(is.na(testdata$BsmtExposure))] <- 'None'
+testdata$BsmtFinType2[which(is.na(testdata$BsmtExposure))] <- 'None'
+testdata$BsmtQual[which(is.na(testdata$BsmtExposure))] <- 'None'
+testdata$BsmtCond[which(is.na(testdata$BsmtExposure))] <- 'None'
+testdata$BsmtFinSF1[which(is.na(testdata$BsmtExposure))] <- 0
+testdata$BsmtFinSF2[which(is.na(testdata$BsmtExposure))] <- 0
+testdata$BsmtUnfSF[which(is.na(testdata$BsmtExposure))] <- 0
+testdata$BsmtExposure[which(is.na(testdata$BsmtExposure))] <- 'None'
+testdata$MSZoning = as.factor(testdata$MSZoning)
+testdata$Exterior1st[which(is.na(testdata$Exterior1st))] <- 'None'
+testdata$Exterior2nd[which(is.na(testdata$Exterior2nd))] <- 'None'
+testdata$MasVnrType[which(is.na(testdata$MasVnrArea))] <- 'None'
+testdata$MasVnrArea[which(is.na(testdata$MasVnrArea))] <- 0
+testdata$MasVnrType = as.factor(testdata$MasVnrType)
+testdata$KitchenQual = as.factor(testdata$KitchenQual)
+testdata$Functional = as.factor(testdata$Functional)
+testdata$SaleType = as.factor(testdata$SaleType)
+testdata$BsmtCond = as.factor(testdata$BsmtCond)
+testdata$Utilities[which(is.na(testdata$Utilities))] = 'AllPub'
+test_complete <- mice(testdata, m = 1, method = 'cart', printFlag = FALSE)
+test_complete <- complete(test_complete)
+TotalMissingNum <- sum(sapply(test_complete, function(x) {sum(is.na(x))}))
+```
+Add New Features into the test dataset
+```{r}
+test_complete$BasementSF <- test_complete$BsmtFinSF1 + test_complete$BsmtFinSF2
+test_complete$OneandTwoFloorSF <- test_complete$X1stFlrSF + test_complete$X2ndFlrSF
+test_complete$FrontSF <- test_complete$WoodDeckSF + test_complete$OpenPorchSF
+test_complete$BasementBath <- test_complete$BsmtFullBath + 0.5 * test_complete$BsmtHalfBath
+test_complete$Bath <- test_complete$FullBath + 0.5 * test_complete$HalfBath
+test_complete$Age <- test_complete$YrSold - test_complete$YearBuilt
+test_complete$YrOfRemodel <- test_complete$YrSold - test_complete$YearRemodAdd
+test_complete$HighQualSF <- test_complete$BsmtFinSF1 + test_complete$BsmtFinSF2 + test_complete$GrLivArea + test_complete$GarageArea + test_complete$WoodDeckSF + test_complete$OpenPorchSF
+test_complete$TotalArea <- test_complete$GrLivArea+test_complete$TotalBsmtSF+test_complete$GarageArea+test_complete$LotArea+test_complete$MasVnrArea+test_complete$OpenPorchSF+test_complete$PoolArea+test_complete$ScreenPorch+test_complete$WoodDeckSF+test_complete$X3SsnPorch+test_complete$EnclosedPorch
+write.csv(test_complete, file = 'test_complete.csv', row.names = FALSE)
+```
+Read the imputed data
+```{r}
+data_complete <- read.csv("data_complete.csv", header = TRUE)
+test_complete <- read.csv("test_complete.csv", header = TRUE)
+complete = rbind(data_complete[,-78], test_complete)
+all_data <- model.matrix(~., complete)
+train_data <- all_data[1:1460,]
+test_data <- all_data[1461:2919,]
+```
+
+Split data into test and train set and Generate Linear Regression Model
+(Since the common occuring ratio for train vs test is around 80 vs 20 which is also refered as Pareto Principle, in this case, the train set is 80% of original data while test set is the rest 20%)
+```{r}
+library(glmnet)
+ind <- train_data
+dep <- data_complete$LogPrice
+set.seed(12345)
+train.ind <- sample(1:dimension[1], dimension[1] * 0.8)
+train_ind <- ind[train.ind, ]
+train_dep <- dep[train.ind]
+test_ind <- ind[-train.ind, ]
+test_dep <- dep[-train.ind]
+fit.lasso <- glmnet(x = train_ind, y = train_dep, alpha = 1)
+fit.ridge <- glmnet(x = train_ind, y = train_dep, alpha = 0)
+fit.elnet <- glmnet(x = train_ind, y = train_dep, alpha = 0.5)
+plot(fit.lasso, main = "LASSO", xvar = "lambda")
+plot(fit.ridge, main = "RIDGE", xvar = "lambda")
+plot(fit.elnet, main = "ELASTIC NET", xvar = "lambda")
+```
+Find the best model with cross validation method
+1. Train 10 models with training dataset, each with different alpha (different combination of LASSO and RIDGE, 0 ~ 1)
+2. Predict the test dataset and compare the mean square error
+3. Compare and find the best alpha value
+```{r}
+fit0 <- cv.glmnet(x = train_ind, y = train_dep, type.measure = "mse", alpha = 0.0, family = "gaussian")
+fit1 <- cv.glmnet(x = train_ind, y = train_dep, type.measure = "mse", alpha = 0.1, family = "gaussian")
+fit2 <- cv.glmnet(x = train_ind, y = train_dep, type.measure = "mse", alpha = 0.2, family = "gaussian")
+fit3 <- cv.glmnet(x = train_ind, y = train_dep, type.measure = "mse", alpha = 0.3, family = "gaussian")
+fit4 <- cv.glmnet(x = train_ind, y = train_dep, type.measure = "mse", alpha = 0.4, family = "gaussian")
+fit5 <- cv.glmnet(x = train_ind, y = train_dep, type.measure = "mse", alpha = 0.5, family = "gaussian")
+fit6 <- cv.glmnet(x = train_ind, y = train_dep, type.measure = "mse", alpha = 0.6, family = "gaussian")
+fit7 <- cv.glmnet(x = train_ind, y = train_dep, type.measure = "mse", alpha = 0.7, family = "gaussian")
+fit8 <- cv.glmnet(x = train_ind, y = train_dep, type.measure = "mse", alpha = 0.8, family = "gaussian")
+fit9 <- cv.glmnet(x = train_ind, y = train_dep, type.measure = "mse", alpha = 0.9, family = "gaussian")
+fit10 <- cv.glmnet(x = train_ind, y = train_dep, type.measure = "mse", alpha = 1.0, family = "gaussian")
+
+pred0 <- predict(fit0, s = fit0$lambda.1se, newx = test_ind)
+pred1 <- predict(fit1, s = fit1$lambda.1se, newx = test_ind)
+pred2 <- predict(fit2, s = fit2$lambda.1se, newx = test_ind)
+pred3 <- predict(fit3, s = fit3$lambda.1se, newx = test_ind)
+pred4 <- predict(fit4, s = fit4$lambda.1se, newx = test_ind)
+pred5 <- predict(fit5, s = fit5$lambda.1se, newx = test_ind)
+pred6 <- predict(fit6, s = fit6$lambda.1se, newx = test_ind)
+pred7 <- predict(fit7, s = fit7$lambda.1se, newx = test_ind)
+pred8 <- predict(fit8, s = fit8$lambda.1se, newx = test_ind)
+pred9 <- predict(fit9, s = fit9$lambda.1se, newx = test_ind)
+pred10 <- predict(fit10, s = fit10$lambda.1se, newx = test_ind)
+
+
+mse0 <- mean((test_dep - pred0)^2)
+mse1 <- mean((test_dep - pred1)^2)
+mse2 <- mean((test_dep - pred2)^2)
+mse3 <- mean((test_dep - pred3)^2)
+mse4 <- mean((test_dep - pred4)^2)
+mse5 <- mean((test_dep - pred5)^2)
+mse6 <- mean((test_dep - pred6)^2)
+mse7 <- mean((test_dep - pred7)^2)
+mse8 <- mean((test_dep - pred8)^2)
+mse9 <- mean((test_dep - pred9)^2)
+mse10 <- mean((test_dep - pred10)^2)
+```
+Plot Alpha vs MSE
+```{r}
+alpha <- seq(0, 1, 0.1)
+mse <- c(mse0, mse1, mse2, mse3, mse4, mse5, mse6, mse7, mse8, mse9, mse10)
+plot(alpha, mse, type='l', xlab="alpha", ylab="MSE")
+text(alpha, mse, round(mse, 5), cex = 0.6, pos = 4, col = "red")
+```
+
+Choose the best alpha (choose alpha = 0.1) for the SalePrice Prediction
+The Score is 0.16360, which ranks 1654. 
+```{r}
+prediction <- predict(fit1, s = fit1$lambda.1se, newx = test_data)
+df <- data.frame(cbind(id, exp(prediction)))
+colnames(df) <- c('Id', 'SalePrice')
+write.csv(df, file = "result.csv", row.names = FALSE)
+```
+Using all variables for Linear Regression
+The Reason for the NA values for some engineered features is that the engineered features are generated by other features with simple addition and substraction, which means: EngineeredFeatures = Feature1 + Feature2 + Feature3 + ...
+Let's assume:
+NewFeature = coef1 * Feature1 + coef2 * Feature2 + coef3 * Feature3 
+and the linear regression equation for the model is:
+Response = a * Feature1 + b * Feature2 + c * Feature3 + d * Feature4 + e * NewFeature
+The equation can be easily re-written into:
+Response = (a + e * coef1) * Feature1 + (b + e * coef2) * Feature2 + (c + e * coef3) * Feature3 + d * Feature4
+So from this perspective:
+The newly generated Features are not useful for the model refinement
+```{r}
+data_complete <- read.csv("data_complete.csv", header = TRUE)
+test_complete <- read.csv("test_complete.csv", header = TRUE)
+test_complete$LogPrice <- 0
+complete = rbind(data_complete, test_complete)
+all_data <- model.matrix(~., complete)
+train_data <- all_data[1:1460,]
+test_data <- all_data[1461:2919,]
+train_feed1 <- data.frame(train_data)
+test_feed1 <- data.frame(test_data)
+lmModel1 <- lm(train_feed1$LogPrice ~ ., data = train_feed1)
+summary(lmModel1)
+plot(lmModel1)
+```
+Take out the variables that are most significant and do the linear regression again
+```{r}
+train_data <- data_complete[, c(2, 3, 10, 11, 12, 15, 16, 17, 20, 32, 34, 35, 38, 39, 41, 42, 45, 51, 53, 54, 58, 62, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78)]
+test_data <- test_complete[, c(2, 3, 10, 11, 12, 15, 16, 17, 20, 32, 34, 35, 38, 39, 41, 42, 45, 51, 53, 54, 58, 62, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78)]
+complete <- rbind(train_data, test_data)
+all_data <- model.matrix(~., complete)
+train_feed2 <- data.frame(all_data[1:1460, ])
+test_feed2 <- data.frame(all_data[1461:2919, ])
+lmModel2 <- lm(train_feed2$LogPrice ~ ., data = train_feed2)
+summary(lmModel2)
+plot(lmModel2)
+```
+From the Four plots, it is very clear that the point 826 and 524 are very unusual and it might be outliers because of the high cook's distance and also high leverage as well as high residuals. They can be classified as outliers with high leverage and high residuals. It has very high influential power towards the result of the model. With or without these two outliers, the results can be quite different.
+```{r}
+train_feed3 <- train_feed2[-c(524, 826),]
+lmModel3 <- lm(train_feed3$LogPrice~., data = train_feed3)
+summary(lmModel3)
+plot(lmModel3)
+```
+Compare the Coefficients with(lmModel2) or without(lmModel3) the 2 potential outliers (826 and 524). From the result, it can be seen that some of the coefficients really change a lot (some even reach 80%, which is a lot)
+```{r}
+library(qpcR)
+coefMatrix <- qpcR:::cbind.na(coef(lmModel2), coef(lmModel3))
+coefFrame <- data.frame(coefMatrix)
+colnames(coefFrame) <- c("With_Outliers", "Without_Outliers")
+coefFrame$ChangePercent <- ifelse(coefFrame$Without_Outliers == 0 | coefFrame$With_Outliers == 0, NA, abs((coefFrame$Without_Outliers - coefFrame$With_Outliers) / coefFrame$Without_Outliers))
+coefFrame
+```
+Predict the Test dataset with the linear regression model (lmModel1, lmModel2 and lmModel3)
+The score for lmModel1 is 0.13617, which ranks 1181 (All variables considered)
+The score for lmModel2 is 0.13101, which ranks 1044 (Only variables with high importance and newly engineered features)
+The score for lmModel3 is 0.12559, which ranks 846 (Only variables with high important and newly engineered features, Exclude outliers)
+```{r}
+prediction1 <- predict(lmModel1, test_feed1)
+prediction2 <- predict(lmModel2, test_feed2)
+prediction3 <- predict(lmModel3, test_feed2)
+
+df1 <- data.frame(cbind(id, exp(prediction1)))
+colnames(df1) <- c('Id', 'SalePrice')
+df2 <- data.frame(cbind(id, exp(prediction2)))
+colnames(df2) <- c('Id', 'SalePrice')
+df3 <- data.frame(cbind(id, exp(prediction3)))
+colnames(df3) <- c('Id', 'SalePrice')
+
+write.csv(df1, "result1.csv", row.names = FALSE)
+write.csv(df2, "result2.csv", row.names = FALSE)
+write.csv(df3, "result3.csv", row.names = FALSE)
+
+```
+From this, it can be concluded:
+1. With less variables involved in the model, the performance has improved
+2. With less outliers, the performance has improved

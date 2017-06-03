@@ -1,0 +1,436 @@
+---
+title: "Homework 4"
+author: "Lang Yujian"
+date: "May 29, 2017"
+output: html_document
+---
+read Data
+```{r}
+train <- read.csv("train.csv", stringsAsFactors = FALSE)
+train <- train[,-1]
+```
+Delete the variables with too much NAs and impute Data
+1. The missing Data for the BsmtQual, BsmtCond, BsmtExposure, BsmtFinType1, BsmtFinType2 are almost the same amounts. It can be estimated that the missing data in these variables are caused by same reason which might be the absence of the basement.
+2. The MasVnrType and MasVnrArea are always NA together. That can caused by the fact that there is no masonry veneer which leads to NA.
+```{r}
+dimension <- dim(train)
+missingNum <- sapply(train, function(x) {sum(is.na(x))})
+data <- train[, missingNum < 0.05 * dimension[1]]
+missingNum <- sapply(data, function(x) {sum(is.na(x))})
+data$BsmtExposure[which(is.na(data$BsmtExposure))] <- 'None'
+data$BsmtFinType1[which(is.na(data$BsmtFinType1))] <- 'None'
+data$BsmtFinType2[which(is.na(data$BsmtFinType2))] <- 'None'
+data$BsmtQual[which(is.na(data$BsmtQual))] <- 'None'
+data$BsmtCond[which(is.na(data$BsmtCond))] <- 'None'
+missingNum <- sapply(data, function(x) {sum(is.na(x))})
+```
+After filling up the basement-related missing values, the other missing values should be imputed with MICE. The categorical variables "MasVnrType" and "Electrical" should be converted into factors before imputation of the data
+```{r}
+library(mice)
+data$MasVnrType[which(is.na(data$MasVnrArea))] <- "None"
+data$MasVnrArea[which(is.na(data$MasVnrArea))] <- 0
+data$Electrical <- as.factor(data$Electrical)
+data_complete <- mice(data, m = 1, printFlag = FALSE)
+data_complete <- complete(data_complete)
+```
+Make sure there are no missing values inside.
+```{r}
+TotalMissingSum <- sum(sapply(data_complete, function(x) {sum(is.na(x))}))
+```
+Add the new features
+1. Basement Square Feet(Type I and Type II)
+2. 1st and 2nd Floor Square Feet
+3. Wood Deck and Open Porch Square Feet
+4. Basement Bathroom
+5. Bathroom
+6. Age of house (Year - YearBuilt)
+7. Year of Last Remodel
+8. High Quality Square Feet
+9. Total Area
+```{r}
+data_complete$BasementSF <- data_complete$BsmtFinSF1 + data_complete$BsmtFinSF2
+data_complete$OneandTwoFloorSF <- data_complete$X1stFlrSF + data_complete$X2ndFlrSF
+data_complete$FrontSF <- data_complete$WoodDeckSF + data_complete$OpenPorchSF
+data_complete$BasementBath <- data_complete$BsmtFullBath + 0.5 * data_complete$BsmtHalfBath
+data_complete$Bath <- data_complete$FullBath + 0.5 * data_complete$HalfBath
+data_complete$Age <- data_complete$YrSold - data_complete$YearBuilt
+data_complete$YrOfRemodel <- data_complete$YrSold - data_complete$YearRemodAdd
+data_complete$HighQualSF <- data_complete$BsmtFinSF1 + data_complete$BsmtFinSF2 + data_complete$GrLivArea + data_complete$GarageArea + data_complete$WoodDeckSF + data_complete$OpenPorchSF
+data_complete$TotalArea <- data_complete$GrLivArea+data_complete$TotalBsmtSF+data_complete$GarageArea+data_complete $LotArea+data_complete$MasVnrArea+data_complete$OpenPorchSF+data_complete$PoolArea+data_complete$ScreenPorch+data_complete$WoodDeckSF+data_complete$X3SsnPorch+data_complete$EnclosedPorch
+data_complete$LogPrice <- log(data_complete$SalePrice)
+data_complete <- data_complete[,-69] #get rid of SalePrice
+```
+Save the imputed data as future use
+```{r}
+write.csv(data_complete, file = "data_complete.csv", row.names = FALSE)
+```
+PreProcess Test Dataset and Impute test dataset
+1. Exterior1st and Exterior2nd are NA all together, so the reason for the missing data is that there is no covering for the house
+2. MasVnrType and MasVnrArea are most of the times, NA together. This is probably caused by the fact that the masonry veneer is none
+```{r}
+test <- read.csv("test.csv", stringsAsFactors = FALSE)
+id <- test$Id
+test <- test[,-1]
+all_names <- colnames(data)
+testdata <- test[,-c(3,6,57,58, 59, 60, 63,64,72, 73, 74)]
+sapply(testdata, function(x) {sum(is.na(x))})
+testdata[c(28, 889), "BsmtExposure"] <- 'Unf'
+testdata[c(758, 759), "BsmtQual"] <- 'None'
+testdata$BsmtFinType1[which(is.na(testdata$BsmtExposure))] <- 'None'
+testdata$BsmtFinType2[which(is.na(testdata$BsmtExposure))] <- 'None'
+testdata$BsmtQual[which(is.na(testdata$BsmtExposure))] <- 'None'
+testdata$BsmtCond[which(is.na(testdata$BsmtExposure))] <- 'None'
+testdata$BsmtFinSF1[which(is.na(testdata$BsmtExposure))] <- 0
+testdata$BsmtFinSF2[which(is.na(testdata$BsmtExposure))] <- 0
+testdata$BsmtUnfSF[which(is.na(testdata$BsmtExposure))] <- 0
+testdata$BsmtExposure[which(is.na(testdata$BsmtExposure))] <- 'None'
+testdata$MSZoning = as.factor(testdata$MSZoning)
+testdata$Exterior1st[which(is.na(testdata$Exterior1st))] <- 'None'
+testdata$Exterior2nd[which(is.na(testdata$Exterior2nd))] <- 'None'
+testdata$MasVnrType[which(is.na(testdata$MasVnrArea))] <- 'None'
+testdata$MasVnrArea[which(is.na(testdata$MasVnrArea))] <- 0
+testdata$MasVnrType = as.factor(testdata$MasVnrType)
+testdata$KitchenQual = as.factor(testdata$KitchenQual)
+testdata$Functional = as.factor(testdata$Functional)
+testdata$SaleType = as.factor(testdata$SaleType)
+testdata$BsmtCond = as.factor(testdata$BsmtCond)
+testdata$Utilities[which(is.na(testdata$Utilities))] = 'AllPub'
+test_complete <- mice(testdata, m = 1, method = 'cart', printFlag = FALSE)
+test_complete <- complete(test_complete)
+TotalMissingNum <- sum(sapply(test_complete, function(x) {sum(is.na(x))}))
+```
+Add New Features into the test dataset
+```{r}
+test_complete$BasementSF <- test_complete$BsmtFinSF1 + test_complete$BsmtFinSF2
+test_complete$OneandTwoFloorSF <- test_complete$X1stFlrSF + test_complete$X2ndFlrSF
+test_complete$FrontSF <- test_complete$WoodDeckSF + test_complete$OpenPorchSF
+test_complete$BasementBath <- test_complete$BsmtFullBath + 0.5 * test_complete$BsmtHalfBath
+test_complete$Bath <- test_complete$FullBath + 0.5 * test_complete$HalfBath
+test_complete$Age <- test_complete$YrSold - test_complete$YearBuilt
+test_complete$YrOfRemodel <- test_complete$YrSold - test_complete$YearRemodAdd
+test_complete$HighQualSF <- test_complete$BsmtFinSF1 + test_complete$BsmtFinSF2 + test_complete$GrLivArea + test_complete$GarageArea + test_complete$WoodDeckSF + test_complete$OpenPorchSF
+test_complete$TotalArea <- test_complete$GrLivArea+test_complete$TotalBsmtSF+test_complete$GarageArea+test_complete$LotArea+test_complete$MasVnrArea+test_complete$OpenPorchSF+test_complete$PoolArea+test_complete$ScreenPorch+test_complete$WoodDeckSF+test_complete$X3SsnPorch+test_complete$EnclosedPorch
+write.csv(test_complete, file = 'test_complete.csv', row.names = FALSE)
+```
+Read the imputed data
+```{r}
+train_complete <- read.csv("data_complete.csv", header = TRUE)
+test_complete <- read.csv("test_complete.csv", header = TRUE)
+LogPrice = train_complete$LogPrice
+complete = rbind(train_complete[,-78], test_complete)
+for (i in 1:dim(complete)[2]) {
+  if (is.character(complete[,i])) {
+    complete[,i] = as.factor(complete[,i])
+  }
+}
+train_complete = complete[1:1460,]
+train_complete = cbind(train_complete, LogPrice)
+test_complete = complete[1461:2919,]
+train.missing = sum(sapply(train_complete, function(x){sum(is.na(x))}))
+test.missing = sum(sapply(test_complete, function(x){sum(is.na(x))}))
+```
+Decision Tree
+```{r}
+set.seed(1)
+formula <- paste('LogPrice ~ .-LogPrice')
+library(rpart)
+train.ind <- sample(1:dim(train_complete)[1], dim(train_complete)[1] * 0.7)
+train.data <- train_complete[train.ind, ]
+test.data <- train_complete[-train.ind, ]
+dt <- rpart(formula, method = 'anova', data = train.data, control = rpart.control(cp = 0))
+best.cp <- dt$cptable[which.min(dt$cptable[,'xerror']), 'CP']
+cptab <- as.data.frame(dt$cptable)
+tradeoff.cp <- cptab$CP[min(which(cptab$xerror - cptab$xstd < min(cptab$xerror)))]
+"cp value for lowest xerror"
+best.cp
+"lowest cp value for acceptable xerror (1 standard deviation)"
+tradeoff.cp
+tree.pruned <- prune(dt, cp = tradeoff.cp)
+test.pred <- predict(tree.pruned, test.data)
+```
+Show predicted error for test.data and Save the Predicted Result for test.csv
+```{r}
+"mean sum square error for the decision tree model"
+sum((test.pred - test.data$LogPrice)^2) / (dim(test.data)[1])
+dt.pred <- exp(predict(tree.pruned, test_complete))
+dt.result <- data.frame(cbind(1461:2919, dt.pred))
+colnames(dt.result) <- c('Id', 'SalePrice')
+write.csv(dt.result, "dt_result.csv", row.names = FALSE)
+plot(tree.pruned, uniform = TRUE) 
+# Since labels often extend outside the plot region it can be helpful to specify xpd = TRUE
+text(tree.pruned, cex = 0.5, use.n = TRUE, xpd = TRUE)
+```
+Random Forest
+```{r}
+set.seed(2)
+library(randomForest)
+formula <- paste("LogPrice ~ .-LogPrice")
+train.ind <- sample(1:dim(train_complete)[1], dim(train_complete)[1] * 0.7)
+train.data <- train_complete[train.ind, ]
+test.data <- train_complete[-train.ind, ]
+errlist <- NULL
+for (i in seq(50, 500, 50)) {
+  rf <- randomForest(as.formula(formula), data = train.data, importance = TRUE, ntree = i)
+  test.pred <- predict(rf, test.data)
+  errlist <- c(errlist, sum((test.pred - test.data$LogPrice)^2) / (dim(test.data)[1]))
+}
+plot(seq(50, 500, 50), errlist, type = 'l')
+```
+Show the predicted stats for the trained random forest model
+```{r}
+rf <- randomForest(as.formula(formula), data = train.data, importance = TRUE, ntree = 300)
+test.pred <- predict(rf, test.data)
+"mean sum square error for the random forest model"
+sum((test.pred - test.data$LogPrice)^2) / (dim(test.data)[1])
+rf.pred <- exp(predict(rf, test_complete))
+rf.result <- data.frame(cbind(1461:2919, rf.pred))
+colnames(rf.result) <- c('Id', 'SalePrice')
+write.csv(rf.result, "rf_result.csv", row.names = FALSE)
+```
+Boosting Tree, prepare the train.data and test.data for training and evaluation process
+```{r}
+set.seed(3)
+library(xgboost)
+formula <- paste("LogPrice ~ .-LogPrice")
+complete.matrix <- model.matrix(~., data = complete)
+train.matrix <- complete.matrix[1:1460,]
+test.matrix <- complete.matrix[1461:2919,]
+train.ind <- sample(1:dim(train.matrix)[1], dim(train.matrix)[1] * 0.7)
+train.data <- train.matrix[train.ind, ]
+train.logprice <- LogPrice[train.ind]
+test.data <- train.matrix[-train.ind, ]
+test.logprice <- LogPrice[-train.ind]
+```
+Fix the eta (learning rate) to be 0.1 and find the optimal nrounds (number of estimators) using the metrics rmse
+```{r}
+set.seed(3)
+param <- list(eta = 0.1, max_depth = 5, min_child_weight = 1, gamma = 0, subsample = 0.8, 
+              colsample_bytree = 0.8, objective = 'reg:linear', nthread = 6, scale_pos_weight = 1)
+cvresult <- xgb.cv(data = train.data, label = train.logprice, params = param, nfold = 5, 
+                   nrounds = 500, verbose = F, maximize = FALSE)
+nrounds_best <- which.min(cvresult$evaluation_log$test_rmse_mean)
+nrounds_tradeoff <- min(which(cvresult$evaluation_log$test_rmse_mean - cvresult$evaluation_log$test_rmse_std < min(cvresult$evaluation_log$test_rmse_mean)))
+'best nrounds'
+nrounds_best
+'tradeoff nrounds'
+nrounds_tradeoff
+```
+Always use the best value. Set nrounds to be nrounds_best and tune max_depth and min_child_weight
+```{r}
+set.seed(3)
+nrounds <- 1000
+df <- data.frame('depth' = integer(0), 'child_weight' = integer(0), 'best_id' = integer(0), 'best_train_rmse' = integer(0))
+for (depth in seq(3, 15, 2)) {
+  for (child_weight in 1:6) {
+    param <- list(eta = 0.1, gamma = 0, subsample = 0.8, colsample_bytree = 0.8, objective = 'reg:linear', 
+              nthread = 6, scale_pos_weight = 1, max_depth = depth, min_child_weight = child_weight)
+    cvresult <- xgb.cv(data = train.data, label = train.logprice, params = param, nfold = 5, nrounds = nrounds, verbose = F, maximize = FALSE)
+    bestid <- which.min(cvresult$evaluation_log$test_rmse_mean)
+    df <- rbind(df, c(depth, child_weight, bestid, cvresult$evaluation_log$test_rmse_mean[bestid]))
+  }
+}
+colnames(df) <- c('depth', 'child_weight', 'best_id', 'best_train_rmse')
+"All results:"
+df
+"Best result:"
+df[which.min(df$best_train_rmse),]
+```
+Set depth to be 11, child_weight to be 6. Tune Gamma
+```{r}
+set.seed(3)
+nrounds <- 2000
+df <- data.frame('gamma' = double(0), 'best_id' = integer(0), 'best_train_rmse' = integer(0))
+for (gamma in seq(0,0.5,0.05)) {
+  param <- list(eta = 0.1, gamma = gamma, subsample = 0.8, colsample_bytree = 0.8, objective = 'reg:linear', 
+              nthread = 6, scale_pos_weight = 1, max_depth = 11, min_child_weight = 6)
+    cvresult <- xgb.cv(data = train.data, label = train.logprice, params = param, nfold = 5, nrounds = nrounds, verbose = F, maximize = FALSE)
+    bestid <- which.min(cvresult$evaluation_log$test_rmse_mean)
+    df <- rbind(df, c(gamma, bestid, cvresult$evaluation_log$test_rmse_mean[bestid]))
+}
+colnames(df) <- c('gamma', 'bestid', 'best_train_rmse')
+"All results:"
+df
+"Best result:"
+df[which.min(df$best_train_rmse),]
+```
+Set Gamma to be 0.15. Tune subsample and colsample_bytree
+```{r}
+set.seed(3)
+nrounds <- 2000
+df <- data.frame('subsample' = double(0), 'colsample_bytree' = double(0), 'best_id' = integer(0), 'best_train_rmse' = integer(0))
+for (subsample in seq(0.6,1.0,0.1)) {
+  for (colsample_bytree in seq(0.6, 1.0, 0.1)) {
+    param <- list(eta = 0.1, gamma = 0.15, subsample = subsample, colsample_bytree = colsample_bytree, objective = 'reg:linear', 
+              nthread = 6, scale_pos_weight = 1, max_depth = 11, min_child_weight = 6)
+      cvresult <- xgb.cv(data = train.data, label = train.logprice, params = param, nfold = 5, nrounds = nrounds, verbose = F, maximize = FALSE)
+      bestid <- which.min(cvresult$evaluation_log$test_rmse_mean)
+      df <- rbind(df, c(subsample, colsample_bytree, bestid, cvresult$evaluation_log$test_rmse_mean[bestid]))
+  }
+}
+colnames(df) <- c('subsample', 'colsample_bytree', 'best_id', 'best_train_rmse')
+"All results:"
+df
+"Best result:"
+df[which.min(df$best_train_rmse),]
+```
+Set subsample to be 0.6, colsample_bytree to be 0.9. Tune the regularization parameters (alpha)
+Find the range for alpha
+```{r}
+set.seed(3)
+nrounds <- 2000
+df <- data.frame('alpha' = double(0), 'best_id' = integer(0), 'best_train_rmse' = integer(0))
+for (alpha in c(0, 0.00001, 0.0001, 0.001, 0.01, 0.1, 1, 100)) {
+    param <- list(eta = 0.1, gamma = 0.15, subsample = 0.6, colsample_bytree = 0.9, objective = 'reg:linear', 
+              nthread = 6, scale_pos_weight = 1, max_depth = 11, min_child_weight = 6, alpha = alpha)
+    cvresult <- xgb.cv(data = train.data, label = train.logprice, params = param, nfold = 5, nrounds = nrounds, verbose = F, maximize = FALSE)
+    bestid <- which.min(cvresult$evaluation_log$test_rmse_mean)
+    df <- rbind(df, c(alpha, bestid, cvresult$evaluation_log$test_rmse_mean[bestid]))
+}
+colnames(df) <- c('alpha', 'best_id', 'best_train_rmse')
+"All results:"
+df
+"Best result:"
+df[which.min(df$best_train_rmse),]
+```
+
+Find alpha
+```{r}
+set.seed(3)
+nrounds <- 2000
+df <- data.frame('alpha' = double(0), 'best_id' = integer(0), 'best_train_rmse' = integer(0))
+for (alpha in c(0.0004, 0.0005, 0.0006, 0.0007, 0.0008, 0.0009)) {
+    param <- list(eta = 0.1, gamma = 0.15, subsample = 0.6, colsample_bytree = 0.9, objective = 'reg:linear', 
+              nthread = 6, scale_pos_weight = 1, max_depth = 11, min_child_weight = 6, alpha = alpha)
+    cvresult <- xgb.cv(data = train.data, label = train.logprice, params = param, nfold = 5, nrounds = nrounds, verbose = F, maximize = FALSE)
+    bestid <- which.min(cvresult$evaluation_log$test_rmse_mean)
+    df <- rbind(df, c(alpha, bestid, cvresult$evaluation_log$test_rmse_mean[bestid]))
+}
+colnames(df) <- c('alpha', 'best_id', 'best_train_rmse')
+"All results:"
+df
+"Best result:"
+df[which.min(df$best_train_rmse),]
+```
+
+Set alpha to be 0.0007 Tune regularization parameter (lambda)
+Find range for lambda
+```{r}
+set.seed(3)
+nrounds <- 2000
+df <- data.frame('lambda' = double(0), 'best_id' = integer(0), 'best_train_rmse' = integer(0))
+for (lambda in c(0, 0.00001, 0.00001, 0.0001, 0.001, 0.01, 0.1, 1, 100)) {
+    param <- list(eta = 0.1, gamma = 0.15, subsample = 0.6, colsample_bytree = 0.9, objective = 'reg:linear', 
+              nthread = 6, scale_pos_weight = 1, max_depth = 11, min_child_weight = 6, alpha = 0.0007, lambda = lambda)
+    cvresult <- xgb.cv(data = train.data, label = train.logprice, params = param, nfold = 5, nrounds = nrounds, verbose = F, maximize = FALSE)
+    bestid <- which.min(cvresult$evaluation_log$test_rmse_mean)
+    df <- rbind(df, c(lambda, bestid, cvresult$evaluation_log$test_rmse_mean[bestid]))
+}
+colnames(df) <- c('lambda', 'best_id', 'best_train_rmse')
+"All results:"
+df
+"Best result:"
+df[which.min(df$best_train_rmse),]
+```
+
+Find lambda
+```{r}
+set.seed(3)
+nrounds <- 2000
+df <- data.frame('lambda' = double(0), 'best_id' = integer(0), 'best_train_rmse' = integer(0))
+for (lambda in c(0.5, 0.6, 0.7, 0.8, 0.9)) {
+    param <- list(eta = 0.1, gamma = 0.15, subsample = 0.6, colsample_bytree = 0.9, objective = 'reg:linear', 
+              nthread = 6, scale_pos_weight = 1, max_depth = 11, min_child_weight = 6, alpha = 0.0007, lambda = lambda)
+    cvresult <- xgb.cv(data = train.data, label = train.logprice, params = param, nfold = 5, nrounds = nrounds, verbose = F, maximize = FALSE)
+    bestid <- which.min(cvresult$evaluation_log$test_rmse_mean)
+    df <- rbind(df, c(lambda, bestid, cvresult$evaluation_log$test_rmse_mean[bestid]))
+}
+colnames(df) <- c('lambda', 'best_id', 'best_train_rmse')
+"All results:"
+df
+"Best result:"
+df[which.min(df$best_train_rmse),]
+```
+
+
+
+Set lambda to be 0.8. Tune learning rate (eta)
+Find range for eta
+```{r}
+set.seed(3)
+nrounds <- 5000
+df <- data.frame('eta' = double(0), 'best_id' = integer(0), 'best_train_rmse' = integer(0))
+for (eta in c(0.001, 0.01, 0.1, 0.2, 0.3)) {
+    param <- list(eta = eta, gamma = 0.15, subsample = 0.6, colsample_bytree = 0.9, objective = 'reg:linear', 
+              nthread = 6, scale_pos_weight = 1, max_depth = 11, min_child_weight = 6, alpha = 0.0007, lambda = 0.8)
+    cvresult <- xgb.cv(data = train.data, label = train.logprice, params = param, nfold = 5, nrounds = nrounds, verbose = F, maximize = FALSE)
+    bestid <- which.min(cvresult$evaluation_log$test_rmse_mean)
+    df <- rbind(df, c(eta, bestid, cvresult$evaluation_log$test_rmse_mean[bestid]))
+}
+colnames(df) <- c('eta', 'best_id', 'best_train_rmse')
+"All results:"
+df
+"Best result:"
+df[which.min(df$best_train_rmse),]
+```
+Find eta
+```{r}
+set.seed(3)
+nrounds <- 5000
+df <- data.frame('eta' = double(0), 'best_id' = integer(0), 'best_train_rmse' = integer(0))
+for (eta in c(0.01, 0.02, 0.03, 0.04)) {
+    param <- list(eta = eta, gamma = 0.15, subsample = 0.6, colsample_bytree = 0.9, objective = 'reg:linear', 
+              nthread = 6, scale_pos_weight = 1, max_depth = 11, min_child_weight = 6, alpha = 0.0007, lambda = 0.8)
+    cvresult <- xgb.cv(data = train.data, label = train.logprice, params = param, nfold = 5, nrounds = nrounds, verbose = F, maximize = FALSE)
+    bestid <- which.min(cvresult$evaluation_log$test_rmse_mean)
+    df <- rbind(df, c(eta, bestid, cvresult$evaluation_log$test_rmse_mean[bestid]))
+}
+colnames(df) <- c('eta', 'best_id', 'best_train_rmse')
+"All results:"
+df
+"Best result:"
+df[which.min(df$best_train_rmse),]
+```
+
+
+The final paramter set
+```{r}
+set.seed(3)
+nrounds <- 4322
+param <- list(eta = 0.03, gamma = 0.15, subsample = 0.6, colsample_bytree = 0.9, objective = 'reg:linear', 
+              nthread = 6, scale_pos_weight = 1, max_depth = 11, min_child_weight = 6, alpha = 0.0007, lambda = 0.8)
+```
+
+Compare with the performance with default parameter set
+```{r}
+set.seed(3)
+cvresult <- xgb.cv(data = train.data, label = train.logprice, params = param, nfold = 5, nrounds = nrounds, verbose = F, maximize = FALSE)
+"tuned parameter set test rmse"
+cvresult$evaluation_log$test_rmse_mean[nrounds]
+defaultcv <- xgb.cv(data = train.data, label = train.logprice, nfold = 5, nrounds = nrounds, verbose = F, maximize = F)
+"default parameter set test rmse"
+defaultcv$evaluation_log$test_rmse_mean[nrounds]
+```
+It can be concluded that the tunned parameter set have better performance than the default parameter set
+
+```{r}
+set.seed(3)
+gbt <- xgboost(data = train.data, label = train.logprice, nrounds = nrounds, params = param, verbose = F, maximize = F)
+test.pred <- predict(gbt, test.data)
+"mean sum square error for the boosting tree model"
+sum((test.pred - test.logprice)^2) / (dim(test.data)[1])
+```
+
+Compare result from decision tree, random forest, gradient boosting tree
+```{r}
+result <- cbind(c("decision tree", "random forest", "gradient boosting tree"), c(0.03760601, 0.01974815, 0.01463133))
+colnames(result) <- c("method", "mean sum square error")
+result
+```
+It can be seen that from the performance perspective, decision tree < random forest < gradient boosting tree
+predict the SalePrice for test.csv
+```{r}
+gbt.pred <- exp(predict(gbt, test.matrix))
+gbt.result <- data.frame(cbind(1461:2919, gbt.pred))
+colnames(gbt.result) <- c('Id', 'SalePrice')
+write.csv(gbt.result, "gbt_result.csv", row.names = FALSE)
+```
